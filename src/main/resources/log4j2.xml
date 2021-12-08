@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration monitorInterval="30">
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+        </Console>
+
+        <File name="DebugFile" fileName="hhc2mqtt.debug.log" />
+        <File name="ErrorFile" fileName="hhc2mqtt.error.log" />
+    </Appenders>
+
+    <Loggers>
+
+<!-- https://logging.apache.org/log4j/2.x/manual/configuration.html#Additivity -->
+        <Logger name="ao.hhc.MQTTClient" level="trace" additivity="false">
+<!--            <ScriptFilter onMatch="ACCEPT" onMisMatch="DENY">-->
+<!--                <Script name="GroovyFilter" language="groovy"><![CDATA[-->
+<!--                if(true) return true;-->
+<!--            if (logEvent.getMarker() != null && logEvent.getMarker().isInstanceOf("FLOW")) {-->
+<!--                return true;-->
+<!--            } else if (logEvent.getContextMap().containsKey("UserId")) {-->
+<!--                return true;-->
+<!--            }-->
+<!--            return false;-->
+<!--            ]]>-->
+<!--                </Script>-->
+<!--            </ScriptFilter>-->
+            <AppenderRef ref="DebugFile"/>
+        </Logger>
+
+        <Root level="error">
+            <AppenderRef ref="ErrorFile"/>
+            <!--<AppenderRef ref="Console"/>-->
+
+        </Root>
+
+    </Loggers>
+</Configuration>

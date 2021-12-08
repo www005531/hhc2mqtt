@@ -1,0 +1,11 @@
+docker/
+
+courgette/
+
+**/.jython_cache
+
+null/*
+**/*.log
+.idea/*
+**/*.iml
+target
