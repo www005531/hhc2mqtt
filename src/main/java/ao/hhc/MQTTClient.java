@@ -12,7 +12,7 @@ import java.util.UUID;
 public class MQTTClient {
     public static final String SERVER_URI =  System.getProperty("SERVER_URI", "tcp://192.168.102.6:1883");
     public static final String MQTT_SERVER_LOGIN = System.getProperty("MQTT_SERVER_LOGIN", "robo1");
-    public static final String MQTT_SERVER_PASSWORD =  System.getProperty("MQTT_SERVER_PASSWORD", "Qwas!100");
+    public static final String MQTT_SERVER_PASSWORD =  System.getProperty("MQTT_SERVER_PASSWORD", "!!!!!!!!!!");
     public static final  String BASE_TOPIC = System.getProperty("BASE_TOPIC", "homeassistant");
     public static final String HA_DISCOVERY_TOPIC = System.getProperty("HA_DISCOVERY_TOPIC", "homeassistant");
 
