@@ -15,8 +15,9 @@ public class HHCClient {
     public static final int LINGER_TIME = 100;
     public static final int SEND_DELAY = 0;
     public static final int RESPONSE_DELAY = 100;
-    public static final String IP = "192.168.102.12";
-    public static final int PORT = 5000;
+    public static final String _IP = System.getProperty("HHC_SERVER_IP", "192.168.3.11");
+    public static final String quasiIP = _IP;
+    public static final int PORT = Integer.parseInt(System.getProperty("HHC_SERVER_PORT", "5000"));
     //public static final String IP = "192.168.102.4";
     //public static final int PORT = 4999;
 
@@ -30,23 +31,23 @@ public class HHCClient {
     private static final Logger logger = LogManager.getLogger(HHCClient.class);
 
     public HHCClient() throws Exception {
-        ip = IP;
+        ip = _IP;
         port = PORT;
         startConnection(ip, port);
     }
 
     public String getDeviceName() {
-
-        return PREFIX + ("HHC_" + IP + ":" + PORT).replaceAll("[^A-Za-z0-9]", "").toUpperCase();
+        // IP = "19216810212"
+        return PREFIX + ("HHC_" + quasiIP + ":" + PORT).replaceAll("[^A-Za-z0-9]", "").toUpperCase();
     }
 
     public String getDeviceElementName(int dev, boolean isSwitch) {
 
-        return PREFIX + ("HHC_" + IP + ":" + PORT).replaceAll("[^A-Za-z0-9]", "").toUpperCase() + (isSwitch ? "-switch" : "-in") + dev;
+        return PREFIX + ("HHC_" + quasiIP + ":" + PORT).replaceAll("[^A-Za-z0-9]", "").toUpperCase() + (isSwitch ? "-switch" : "-in") + dev;
     }
 
     public String getDeviceElementUUID(int dev, boolean isSwitch) {
-        return PREFIX + ("HHC_" + IP + ":" + PORT).replaceAll("[^A-Za-z0-9]", "").toUpperCase() + (isSwitch ? "-switch" : "-in") + dev;
+        return PREFIX + ("HHC_" + quasiIP + ":" + PORT).replaceAll("[^A-Za-z0-9]", "").toUpperCase() + (isSwitch ? "-switch" : "-in") + dev;
     }
 
     private void startConnection(String ip, int port) throws Exception {
@@ -96,7 +97,7 @@ public class HHCClient {
 
     }
 
-    private boolean respIsOK(String r) throws Exception {
+    private boolean respIsOK(String r) {
         boolean retOn = r.matches("on\\d{1}");
         boolean retOff = r.matches("off\\d{1}");
         boolean retInput = r.matches("input\\d{8}");
@@ -130,7 +131,7 @@ public class HHCClient {
     }
 
 
-    public void stopConnection() throws Exception {
+    public void stopConnection() {
 
         try {
             in.close();
@@ -190,22 +191,18 @@ public class HHCClient {
     public static void debug(String s) {
         logger.debug(s);
     }
+
     public static void error(String s) {
         logger.error(s);
     }
 
-    public static void main(String[] args) throws Exception {
-
+    public static void main(String[] args) {
         for (int i = 0; i < 1; i++) {
-            Thread t = new Thread(new Runnable() {
-
-                public void run() {
-                    try {
-                        new HHCClient().testCommands();
-                    } catch (Exception e) {
-                        error(e.getMessage());
-                    }
-                    ;
+            Thread t = new Thread(() -> {
+                try {
+                    new HHCClient().testCommands();
+                } catch (Exception e) {
+                    error(e.getMessage());
                 }
             });
             t.start();

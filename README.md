@@ -26,6 +26,6 @@ How to build:
 
 6. program parameters:
 
-java -jar hhc-1.0-SNAPSHOT.jar -DSERVER_URI="tcp://192.168.102.6:1883" -DMQTT_SERVER_LOGIN="XXX" -DMQTT_SERVER_PASSWORD="YYYY" -DBASE_TOPIC="homeassistant" -DHA_DISCOVERY_TOPIC="homeassistant"
+java -jar hhc-1.0-SNAPSHOT.jar -DHHC_SERVER_IP="192.168.3.11" -DHHC_SERVER_PORT=5000 -DMQTT_SERVER_URI="tcp://192.168.102.6:1883" -DMQTT_SERVER_LOGIN="XXX" -DMQTT_SERVER_PASSWORD="YYYY" -DBASE_TOPIC="homeassistant" -DHA_DISCOVERY_TOPIC="homeassistant"
 
 If there are any problems with the software, please write or report bugs - I will try to fix it as quickly as possible! 

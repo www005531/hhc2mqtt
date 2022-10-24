@@ -10,9 +10,9 @@ import org.apache.logging.log4j.Logger;
 import java.util.UUID;
 
 public class MQTTClient {
-    public static final String SERVER_URI =  System.getProperty("SERVER_URI", "tcp://192.168.102.6:1883");
+    public static final String SERVER_URI =  System.getProperty("MQTT_SERVER_URI", "tcp://192.168.3.4:1883");
     public static final String MQTT_SERVER_LOGIN = System.getProperty("MQTT_SERVER_LOGIN", "robo1");
-    public static final String MQTT_SERVER_PASSWORD =  System.getProperty("MQTT_SERVER_PASSWORD", "!!!!!!!!!!");
+    public static final String MQTT_SERVER_PASSWORD =  System.getProperty("MQTT_SERVER_PASSWORD", "Qwas!100");
     public static final  String BASE_TOPIC = System.getProperty("BASE_TOPIC", "homeassistant");
     public static final String HA_DISCOVERY_TOPIC = System.getProperty("HA_DISCOVERY_TOPIC", "homeassistant");
 
@@ -32,7 +32,7 @@ public class MQTTClient {
 
     public MQTTClient() throws Exception {
 
-        String publisherId = "HHCClient_" + UUID.randomUUID().toString();
+        String publisherId = "HHCClient_" + UUID.randomUUID();
 
         client = new MqttClient(SERVER_URI, publisherId,
                 new MqttDefaultFilePersistence(System.getProperty("TEMP") + "/MQTTCLIENT"));
@@ -104,44 +104,40 @@ public class MQTTClient {
             setBinaryInputsAvailable(dev);
         }
 
-        new Thread(new Runnable() {
+        new Thread(() -> {
 
-            @Override
-            public void run() {
-
-                while (true) {
-                    try {
-                        //Thread.sleep(100);
-                        String in = cc.sendMessage("input");
-                        if (in == null) in = "";
-                        in = in.trim();
-                        if (in.equals(lastInput)) continue;
-                        lastInput = in;
-                        char a[] = in.toCharArray();
-                        debug("input: " + in);
-                        // "input00000001";
-                        if (in.indexOf("input") > -1) {
-                            for (int dev = 1; dev < 9; dev++) {
-                                boolean one = ("" + a[9 - dev + 4]).equals("1");
-                                debug("dev[" + dev + "]=" + (one ? "1" : "0"));
-                                client.publish(BASE_TOPIC+ "/binary_sensor/" + cc.getDeviceName() + "/input" + dev + "/state",
-                                        new MqttMessage((one ? "ON" : "OFF").getBytes()));
-                                // setBinaryInputsAvailable(dev)
-                            }
-
+            while (true) {
+                try {
+                    //Thread.sleep(100);
+                    String in = cc.sendMessage("input");
+                    if (in == null) in = "";
+                    in = in.trim();
+                    if (in.equals(lastInput)) continue;
+                    lastInput = in;
+                    char[] a = in.toCharArray();
+                    debug("input: " + in);
+                    // "input00000001";
+                    if (in.contains("input")) {
+                        for (int dev = 1; dev < 9; dev++) {
+                            boolean one = ("" + a[9 - dev + 4]).equals("1");
+                            debug("dev[" + dev + "]=" + (one ? "1" : "0"));
+                            client.publish(BASE_TOPIC+ "/binary_sensor/" + cc.getDeviceName() + "/input" + dev + "/state",
+                                    new MqttMessage((one ? "ON" : "OFF").getBytes()));
+                            // setBinaryInputsAvailable(dev)
                         }
 
-
-                    } catch (Exception e) {
-                        error(e.getMessage());
-                        try {
-                            Thread.sleep(1000);
-                        } catch (Exception e2) {
-                            error(e2.getMessage());
-                        }
                     }
 
+
+                } catch (Exception e) {
+                    error(e.getMessage());
+                    try {
+                        Thread.sleep(1000);
+                    } catch (Exception e2) {
+                        error(e2.getMessage());
+                    }
                 }
+
             }
         }).start();
 
@@ -223,7 +219,7 @@ public class MQTTClient {
                 debug(new String(payload) + "=");
 
                 String devCmd = new String(payload);
-                if (devCmd.toUpperCase().indexOf("ON") > -1) {
+                if (devCmd.toUpperCase().contains("ON")) {
                     devCmd = "on" + dev;
                 } else {
                     devCmd = "off" + dev;
@@ -296,10 +292,10 @@ public class MQTTClient {
         String in = cc.sendMessage("read");
         if (in == null) in = "";
         in = in.trim();
-        char a[] = in.toCharArray();
+        char[] a = in.toCharArray();
         debug("relay: " + in);
         // "input00000001";
-        if (in.indexOf("relay") > -1) {
+        if (in.contains("relay")) {
             for (int dev = 1; dev < 9; dev++) {
                 boolean one = ("" + a[9 - dev + 4]).equals("1");
                 debug("dev[" + dev + "]=" + (one ? "1" : "0"));
