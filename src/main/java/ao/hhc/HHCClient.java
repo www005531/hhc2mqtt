@@ -26,48 +26,75 @@ public class HHCClient {
     private BufferedReader in;
     String ip;
     int port;
-    public static final String OLD_PREFIX = "B-";
-    public static final String PREFIX = "C-";
+    public static final String OLD_PREFIX = "B-".toLowerCase();
+    public static final String PREFIX = "D_".toLowerCase();
     private static final Logger logger = LogManager.getLogger(HHCClient.class);
 
-    public HHCClient() throws Exception {
+    public HHCClient()  {
         ip = _IP;
         port = PORT;
-        startConnection(ip, port);
+    }
+
+    public void restart() {
+        System.out.println("HHC RESTART");
+        close();
+        while(!startConnection(ip, port)){
+            close();
+            try { Thread.sleep(2000);}catch (Exception e2){}
+        }
     }
 
     public String getDeviceName() {
         // IP = "19216810212"
-        return PREFIX + ("HHC_" + quasiIP + ":" + PORT).replaceAll("[^A-Za-z0-9]", "").toUpperCase();
+        String s = PREFIX + ("HHC_" + quasiIP + ":" + PORT).replaceAll("[^A-Za-z0-9]", "").toLowerCase();
+        s = PREFIX + ("HHC_").replaceAll("[^A-Za-z0-9]", "").toLowerCase();
+        //s = s.replaceAll("192168311", "19216810212");
+        return s;
     }
 
     public String getDeviceElementName(int dev, boolean isSwitch) {
 
-        return PREFIX + ("HHC_" + quasiIP + ":" + PORT).replaceAll("[^A-Za-z0-9]", "").toUpperCase() + (isSwitch ? "-switch" : "-in") + dev;
+        String s =  PREFIX + ("HHC_" + quasiIP + ":" + PORT).replaceAll("[^A-Za-z0-9]", "").toLowerCase() + (isSwitch ? "-switch" : "-in") + dev;
+        s =  PREFIX + ("HHC_" ).replaceAll("[^A-Za-z0-9]", "").toLowerCase() + (isSwitch ? "_switch" : "_in") + dev;
+        //s = s.replaceAll("192168311", "19216810212");
+
+        return s;
     }
 
     public String getDeviceElementUUID(int dev, boolean isSwitch) {
-        return PREFIX + ("HHC_" + quasiIP + ":" + PORT).replaceAll("[^A-Za-z0-9]", "").toUpperCase() + (isSwitch ? "-switch" : "-in") + dev;
+        String s=  PREFIX + ("HHC_" + quasiIP + ":" + PORT).replaceAll("[^A-Za-z0-9]", "").toLowerCase() + (isSwitch ? "-switch" : "-in") + dev;
+        s=  PREFIX + ("HHC_").replaceAll("[^A-Za-z0-9]", "").toLowerCase() + (isSwitch ? "_switch" : "_in") + dev;
+        //s = s.replaceAll("192168311", "19216810212");
+        return s;
     }
 
-    private void startConnection(String ip, int port) throws Exception {
-        boolean tryConnect = true;
-        int retryCount = 0;
-        while (tryConnect) {
-            try {
-                clientSocket = new Socket(ip, port);
-                clientSocket.setSoLinger(true, LINGER_TIME);
-                clientSocket.setSoTimeout(READ_TIMEOUT);
-                out = new PrintWriter(clientSocket.getOutputStream(), false);
-                in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-                tryConnect = false;
-            } catch (Exception e) {
-                error(e.getMessage());
-                error("starting connection... retry count=" + (retryCount++) + " threadId=" + Thread.currentThread().getId());
-                Thread.sleep(2000);
+
+    private synchronized  boolean startConnection(String ip, int port)   {
+        synchronized (Object.class) {
+            if (clientSocket != null && clientSocket.isConnected()) return true;
+            System.out.println("hhc#74 Connecting to " + ip + ":" + port);
+            boolean tryConnect = true;
+            int retryCount = 0;
+            while (tryConnect) {
+                try {
+                    retryCount++;
+                    clientSocket = new Socket(ip, port);
+                    clientSocket.setSoLinger(true, LINGER_TIME);
+                    clientSocket.setSoTimeout(READ_TIMEOUT);
+                    out = new PrintWriter(clientSocket.getOutputStream(), false);
+                    in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                    tryConnect = false;
+                } catch (Exception e) {
+                    System.out.println("HHC ERROR#69#" + e.getMessage());
+                    error("hhc#88 "+e.getMessage());
+                    error("hhc#89 starting connection... retry count=" + (retryCount++) + " threadId=" + Thread.currentThread().getId());
+                    return false;
+                }
             }
+            System.out.println("hhc#93 connection started for thread " + Thread.currentThread().getId() + ". redone " + retryCount + " times.");
+            debug("connection started for thread " + Thread.currentThread().getId() + ". redone " + retryCount + " times.");
+            return true;
         }
-        debug("connection started for thread " + Thread.currentThread().getId() + ". redone " + retryCount + " times.");
     }
 
     static int lp = 0;
@@ -89,9 +116,8 @@ public class HHCClient {
                 return resp;
             }
         } catch (Exception e) {
-            error(e.getMessage());
-            stopConnection();
-            startConnection(ip, port);
+            error("hhc#118 "+e.getMessage());
+            restart();
             return null;
         }
 
@@ -120,8 +146,7 @@ public class HHCClient {
                 s += "" + (char) in.read();
                 if (readCount++ > 20) throw new SocketException();
             } catch (SocketException | SocketTimeoutException se) {
-                stopConnection();
-                startConnection(ip, port);
+                restart();
                 return null;
             }
             if (respIsOK(s)) break;
@@ -131,7 +156,7 @@ public class HHCClient {
     }
 
 
-    public void stopConnection() {
+    private void close() {
 
         try {
             in.close();
@@ -148,42 +173,43 @@ public class HHCClient {
         } catch (Exception e) {
             //e.printStackTrace();
         }
+        clientSocket = null;
         debug("connection stopped");
     }
 
     public void testCommands() throws Exception {
-        HHCClient cc = new HHCClient();
+        restart();
 
         while (Math.random() < 10) {
-            debug(cc.sendMessage("name"));
+            debug(sendMessage("name"));
             Thread.sleep(1000);
         }
         if (true) return;
         //cc.startConnection("192.168.102.4",4999);
         while (true) {
-            debug(Thread.currentThread().getId() + " " + cc.clientSocket.isConnected() + " " + cc.clientSocket.isInputShutdown() + " " + cc.clientSocket.isOutputShutdown());
+            debug(Thread.currentThread().getId() + " " + clientSocket.isConnected() + " " + clientSocket.isInputShutdown() + " " + clientSocket.isOutputShutdown());
 
             if (Math.random() > 0.5) {
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("on1"));
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("on2"));
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("on3"));
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("on4"));
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("on5"));
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("on6"));
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("on7"));
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("on8"));
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("read"));
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("off1"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("on1"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("on2"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("on3"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("on4"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("on5"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("on6"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("on7"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("on8"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("read"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("off1"));
             } else {
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("off2"));
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("off3"));
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("off4"));
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("off5"));
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("off6"));
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("off7"));
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("off8"));
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("input"));
-                debug(Thread.currentThread().getId() + " " + cc.sendMessage("read"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("off2"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("off3"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("off4"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("off5"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("off6"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("off7"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("off8"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("input"));
+                debug(Thread.currentThread().getId() + " " + sendMessage("read"));
             }
         }
     }

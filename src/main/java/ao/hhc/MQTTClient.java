@@ -10,15 +10,15 @@ import org.apache.logging.log4j.Logger;
 import java.util.UUID;
 
 public class MQTTClient {
-    public static final String SERVER_URI =  System.getProperty("MQTT_SERVER_URI", "tcp://192.168.3.4:1883");
+    public static final String SERVER_URI = System.getProperty("MQTT_SERVER_URI", "tcp://192.168.3.4:1883");
     public static final String MQTT_SERVER_LOGIN = System.getProperty("MQTT_SERVER_LOGIN", "robo1");
-    public static final String MQTT_SERVER_PASSWORD =  System.getProperty("MQTT_SERVER_PASSWORD", "Qwas!100");
-    public static final  String BASE_TOPIC = System.getProperty("BASE_TOPIC", "homeassistant");
+    public static final String MQTT_SERVER_PASSWORD = System.getProperty("MQTT_SERVER_PASSWORD", "Qwas!100");
+    public static final String BASE_TOPIC = System.getProperty("BASE_TOPIC", "homeassistant");
     public static final String HA_DISCOVERY_TOPIC = System.getProperty("HA_DISCOVERY_TOPIC", "homeassistant");
 
 
     IMqttClient client;
-    HHCClient cc = new HHCClient();
+    HHCClient hhc;
 
     static {
         // BASE_TOPIC = HA_DISCOVERY_TOPIC;
@@ -30,25 +30,38 @@ public class MQTTClient {
 
     private static final Logger logger = LogManager.getLogger(MQTTClient.class);
 
-    public MQTTClient() throws Exception {
+    public void connect() throws Exception {
+        synchronized (Object.class) {
+            try {
+                if (client != null && client.isConnected()) return;
+                String publisherId = "HHCClient_" + UUID.randomUUID();
+                client = new MqttClient(SERVER_URI, publisherId,
+                        new MqttDefaultFilePersistence(System.getProperty("TEMP") + "/MQTTCLIENT"));
 
-        String publisherId = "HHCClient_" + UUID.randomUUID();
+                MqttConnectOptions options = new MqttConnectOptions();
+                options.setUserName(MQTT_SERVER_LOGIN);
+                options.setPassword(MQTT_SERVER_PASSWORD.toCharArray());
+                options.setAutomaticReconnect(true);
+                options.setCleanSession(false); // czyli w razie rozłączenia przechowywana jest informacja o subskrypcjach
+                options.setConnectionTimeout(10);
+                options.setMaxInflight(100);
+                client.connect(options);
+            } catch (Exception e) {
+                throw new Exception("MQTT#connect:" + e.getMessage());
+            }
+        }
 
-        client = new MqttClient(SERVER_URI, publisherId,
-                new MqttDefaultFilePersistence(System.getProperty("TEMP") + "/MQTTCLIENT"));
+    }
 
-        MqttConnectOptions options = new MqttConnectOptions();
-        options.setUserName(MQTT_SERVER_LOGIN);
-        options.setPassword(MQTT_SERVER_PASSWORD.toCharArray());
-        options.setAutomaticReconnect(true);
-        options.setCleanSession(false); // czyli w razie rozłączenia przechowywana jest informacja o subskrypcjach
-        options.setConnectionTimeout(10);
-        options.setMaxInflight(100);
-
-        client.connect(options);
+    public void publish(String topic, String message) throws Exception {
+        connect();
+        //  publisher.publish("hhc/sw/1/available",new MqttMessage("offline".getBytes()));
+        client.publish(topic, new MqttMessage(message.getBytes()));
     }
 
     public void process() throws Exception {
+
+        connect();
 
         //msg.setQos(0);
         //msg.setRetained(true);
@@ -75,24 +88,25 @@ public class MQTTClient {
 
 
     public void discoverBinaryInputs() throws Exception {
+        connect();
         for (int dev = 1; dev < 9; dev++) {
 
-            MqttMessage msg = new MqttMessage(("{\"name\": \"" + cc.getDeviceElementName(dev, false) + "\", " +
+            MqttMessage msg = new MqttMessage(("{\"name\": \"" + hhc.getDeviceElementName(dev, false) + "\", " +
                     //   " \"force_update\": true, \"qos\": 1 , " +
-                    " \"unique_id\": \"" + cc.getDeviceElementUUID(dev, false) + "\", " +
-                    " \"availability\": [{ \"topic\": \""+BASE_TOPIC+"/binary_sensor/" + cc.getDeviceName() + "/input" + dev + "/availability\", " +
+                    " \"unique_id\": \"" + hhc.getDeviceElementUUID(dev, false) + "\", " +
+                    " \"availability\": [{ \"topic\": \"" + BASE_TOPIC + "/binary_sensor/" + hhc.getDeviceName() + "/input" + dev + "/availability\", " +
                     " \"payload_available\": \"online\", \"payload_not_available\": \"offline\" } ] , " +
                     // " \"qos\": \"0\", " +
                     //    " \"device_class\": \"motion\", " +
 
-                    " \"device\":{\"identifiers\":[\"" + cc.getDeviceName() + "\"]," +
+                    " \"device\":{\"identifiers\":[\"" + hhc.getDeviceName() + "\"]," +
                     " \"manufacturer\":\"CHRL\",\"model\":\"HHC-N8180P\",\"name\":\"HHC" + "\",\"sw_version\":\"" + HHCClient.PREFIX + "1.1\", " +
                     " \"suggested_area\": \"AUTOMATYKA\"}, " +
                     // " \"command_topic\": \""+BASE_TOPIC+"/switch/" + cc.getDeviceName(dev) + "/set\", " +
-                    " \"state_topic\": \""+BASE_TOPIC+"/binary_sensor/" + cc.getDeviceName() + "/input" + dev + "/state\" } ").getBytes()
+                    " \"state_topic\": \"" + BASE_TOPIC + "/binary_sensor/" + hhc.getDeviceName() + "/input" + dev + "/state\" } ").getBytes()
             );
             msg.setRetained(true);
-            client.publish(HA_DISCOVERY_TOPIC+"/binary_sensor/" + cc.getDeviceName() + "/input" + dev + "/config",
+            client.publish(HA_DISCOVERY_TOPIC + "/binary_sensor/" + hhc.getDeviceName() + "/input" + dev + "/config",
                     msg);
             //subscribe(dev);
         }
@@ -100,16 +114,29 @@ public class MQTTClient {
 
             //subscribe(dev);
         }
-        for (int dev = 1; dev < 9; dev++) {
-            setBinaryInputsAvailable(dev);
-        }
+        new Thread(() -> {
+            while (true) {
+                for (int dev = 1; dev < 9; dev++) {
+                    try {
+                        setBinaryInputsAvailable(dev);
+                    } catch (Exception e) {
+
+                    }
+                }
+                try {
+                    Thread.sleep(10000);
+                } catch (Exception e2) {
+                }
+            }
+
+        }).start();
 
         new Thread(() -> {
 
             while (true) {
                 try {
                     //Thread.sleep(100);
-                    String in = cc.sendMessage("input");
+                    String in = hhc.sendMessage("input");
                     if (in == null) in = "";
                     in = in.trim();
                     if (in.equals(lastInput)) continue;
@@ -121,7 +148,7 @@ public class MQTTClient {
                         for (int dev = 1; dev < 9; dev++) {
                             boolean one = ("" + a[9 - dev + 4]).equals("1");
                             debug("dev[" + dev + "]=" + (one ? "1" : "0"));
-                            client.publish(BASE_TOPIC+ "/binary_sensor/" + cc.getDeviceName() + "/input" + dev + "/state",
+                            client.publish(BASE_TOPIC + "/binary_sensor/" + hhc.getDeviceName() + "/input" + dev + "/state",
                                     new MqttMessage((one ? "ON" : "OFF").getBytes()));
                             // setBinaryInputsAvailable(dev)
                         }
@@ -130,7 +157,7 @@ public class MQTTClient {
 
 
                 } catch (Exception e) {
-                    error(e.getMessage());
+                    error("MQTT#144 " + e.getMessage());
                     try {
                         Thread.sleep(1000);
                     } catch (Exception e2) {
@@ -148,27 +175,28 @@ public class MQTTClient {
 
 
     public void discoverSwitches() throws Exception {
+        connect();
         for (int dev = 1; dev < 9; dev++) {
 
-            MqttMessage msg = new MqttMessage(("{\"name\": \"" + cc.getDeviceElementName(dev, true) + "\", " +
+            MqttMessage msg = new MqttMessage(("{\"name\": \"" + hhc.getDeviceElementName(dev, true) + "\", " +
                     //   " \"force_update\": true, \"qos\": 1 , " +
-                    " \"unique_id\": \"" + cc.getDeviceElementUUID(dev, true) + "\", " +
-                    " \"availability\": [{ \"topic\": \""+BASE_TOPIC+"/switch/" + cc.getDeviceName() + "/switch" + dev + "/availability\", " +
+                    " \"unique_id\": \"" + hhc.getDeviceElementUUID(dev, true) + "\", " +
+                    " \"availability\": [{ \"topic\": \"" + BASE_TOPIC + "/switch/" + hhc.getDeviceName() + "/switch" + dev + "/availability\", " +
                     " \"payload_available\": \"online\", \"payload_not_available\": \"offline\" } ] , " +
                     // " \"qos\": \"0\", " +
                     //   " \"device_class\": \"power\", " +
 
-                    " \"device\":{\"identifiers\":[\"" + cc.getDeviceName() + "\"]," +
+                    " \"device\":{\"identifiers\":[\"" + hhc.getDeviceName() + "\"]," +
                     " \"manufacturer\":\"CHRL\",\"model\":\"HHC-N8180P\",\"name\":\"HHC" + "\",\"sw_version\":\"" + HHCClient.PREFIX + "1.1\", " +
                     " \"suggested_area\": \"AUTOMATYKA\"}, " +
-                    " \"command_topic\": \""+BASE_TOPIC+"/switch/" + cc.getDeviceName() + "/switch" + dev + "/set\", " +
-                    " \"state_topic\": \""+BASE_TOPIC+ "/switch/" + cc.getDeviceName() + "/switch" + dev + "/state\" } ").getBytes()
+                    " \"command_topic\": \"" + BASE_TOPIC + "/switch/" + hhc.getDeviceName() + "/switch" + dev + "/set\", " +
+                    " \"state_topic\": \"" + BASE_TOPIC + "/switch/" + hhc.getDeviceName() + "/switch" + dev + "/state\" } ").getBytes()
             );
             msg.setRetained(true);
-            String s2 = HA_DISCOVERY_TOPIC+ "/switch/" + cc.getDeviceName() + "/switch" + dev + "/config";
+            String s2 = HA_DISCOVERY_TOPIC + "/switch/" + hhc.getDeviceName() + "/switch" + dev + "/config";
             client.publish(s2,
                     msg);
-            logger.debug("s2="+s2+" msg="+new String(msg.getPayload()));
+            logger.debug("s2=" + s2 + " msg=" + new String(msg.getPayload()));
             //MqttTopic topic = client.getTopic(s2);
             //subscribe(dev);
             //logger.debug("topic="+topic);
@@ -179,9 +207,23 @@ public class MQTTClient {
         }
         readSwitches();
 
-        for (int dev = 1; dev < 9; dev++) {
-            setSwitchesAvailable(dev);
-        }
+        new Thread(() -> {
+            while (true) {
+                for (int dev = 1; dev < 9; dev++) {
+                    try {
+                        setSwitchesAvailable(dev);
+                    } catch (Exception e) {
+
+                    }
+                }
+                try {
+                     Thread.sleep(10000);
+                } catch (Exception e2) {
+                }
+            }
+
+        }).start();
+
 
         new Thread(new Runnable() {
             @Override
@@ -211,8 +253,9 @@ public class MQTTClient {
 
 
     public void subscribeSwitch(int dev) throws Exception {
+        connect();
         debug("subscribe " + dev);
-        client.subscribe(BASE_TOPIC+"/switch/" + cc.getDeviceName() + "/switch" + dev + "/set", (topic, msg) -> {
+        client.subscribe(BASE_TOPIC + "/switch/" + hhc.getDeviceName() + "/switch" + dev + "/set", (topic, msg) -> {
             try {
                 debug("<subscribe>");
                 byte[] payload = msg.getPayload();
@@ -224,16 +267,16 @@ public class MQTTClient {
                 } else {
                     devCmd = "off" + dev;
                 }
-                String ret = cc.sendMessage(devCmd);
+                String ret = hhc.sendMessage(devCmd);
                 debug("ret=[" + ret + "]");
 
 //                int i = Integer.parseInt("" + new String(payload).replaceAll("on", "").replaceAll("off", ""));
-                String stateTopic = BASE_TOPIC+"/switch/" + cc.getDeviceName() + "/switch" + dev + "/state";
+                String stateTopic = BASE_TOPIC + "/switch/" + hhc.getDeviceName() + "/switch" + dev + "/state";
                 debug("sending on topic=" + topic + " stateTopic=" + stateTopic + " message: " + msg);
                 client.publish(stateTopic, new MqttMessage(payload));
                 debug("Message sent.");
             } catch (Exception e) {
-                error(e.getMessage());
+                error("MQTT#249 " + e.getMessage());
             }
         });
     }
@@ -248,48 +291,51 @@ public class MQTTClient {
     }
 
     private void setAvailable(int dev, boolean available, boolean isBinaryInput) throws Exception {
+        connect();
         debug("sending available dev:" + dev + " available=" + available);
-        String topic = BASE_TOPIC+"/switch/" + cc.getDeviceName() + "/switch" + dev + "/availability";
+        String topic = BASE_TOPIC + "/switch/" + hhc.getDeviceName() + "/switch" + dev + "/availability";
 
         if (isBinaryInput)
-            topic = BASE_TOPIC+"/binary_sensor/" + cc.getDeviceName() + "/input" + dev + "/availability";
+            topic = BASE_TOPIC + "/binary_sensor/" + hhc.getDeviceName() + "/input" + dev + "/availability";
         client.publish(topic, new MqttMessage((available ? "online" : "offline").getBytes()));
     }
 
     public void cleanUpOldVersion(int dev) throws Exception {
+        connect();
 
-        String removeTopic = HA_DISCOVERY_TOPIC+"/switch/" + cc.getDeviceElementName(dev, true).replaceAll(HHCClient.PREFIX, HHCClient.OLD_PREFIX).
+        String removeTopic = HA_DISCOVERY_TOPIC + "/switch/" + hhc.getDeviceElementName(dev, true).replaceAll(HHCClient.PREFIX, HHCClient.OLD_PREFIX).
                 replaceAll("5000", "4999").replaceAll("10212", "1024") + "/switch/config";
         debug("removeTopic=" + removeTopic);
         client.publish(removeTopic, new byte[0], 0, true);
-        removeTopic = HA_DISCOVERY_TOPIC+"/switch/" + cc.getDeviceElementName(dev, true).replaceAll(HHCClient.PREFIX, HHCClient.OLD_PREFIX)
+        removeTopic = HA_DISCOVERY_TOPIC + "/switch/" + hhc.getDeviceElementName(dev, true).replaceAll(HHCClient.PREFIX, HHCClient.OLD_PREFIX)
                 + "/switch/config";
         debug("removeTopic=" + removeTopic);
         client.publish(removeTopic, new byte[0], 0, true);
 
-        removeTopic = BASE_TOPIC+"/switch/" + cc.getDeviceElementName(dev, true).replaceAll(HHCClient.PREFIX, HHCClient.OLD_PREFIX).
+        removeTopic = BASE_TOPIC + "/switch/" + hhc.getDeviceElementName(dev, true).replaceAll(HHCClient.PREFIX, HHCClient.OLD_PREFIX).
                 replaceAll("5000", "4999").replaceAll("10212", "1024") + "/switch";
         debug("removeTopic=" + removeTopic);
         client.publish(removeTopic, new byte[0], 0, true);
 
-        removeTopic = BASE_TOPIC+"/switch/" + cc.getDeviceElementName(dev, true).replaceAll(HHCClient.PREFIX, HHCClient.OLD_PREFIX) + "/switch";
+        removeTopic = BASE_TOPIC + "/switch/" + hhc.getDeviceElementName(dev, true).replaceAll(HHCClient.PREFIX, HHCClient.OLD_PREFIX) + "/switch";
         debug("removeTopic=" + removeTopic);
         client.publish(removeTopic, new byte[0], 0, true);
 
 
-        removeTopic = BASE_TOPIC+"/switch/" + cc.getDeviceElementName(dev, true).replaceAll(HHCClient.PREFIX, HHCClient.OLD_PREFIX).
+        removeTopic = BASE_TOPIC + "/switch/" + hhc.getDeviceElementName(dev, true).replaceAll(HHCClient.PREFIX, HHCClient.OLD_PREFIX).
                 replaceAll("5000", "4999").replaceAll("10212", "1024") + "/";
         debug("removeTopic=" + removeTopic);
         client.publish(removeTopic, new byte[0], 0, true);
 
-        removeTopic = BASE_TOPIC+"/switch/" + cc.getDeviceElementName(dev, true).replaceAll(HHCClient.PREFIX, HHCClient.OLD_PREFIX) + "/";
+        removeTopic = BASE_TOPIC + "/switch/" + hhc.getDeviceElementName(dev, true).replaceAll(HHCClient.PREFIX, HHCClient.OLD_PREFIX) + "/";
         debug("removeTopic=" + removeTopic);
         client.publish(removeTopic, new byte[0], 0, true);
     }
 
 
     public void readSwitches() throws Exception {
-        String in = cc.sendMessage("read");
+        connect();
+        String in = hhc.sendMessage("read");
         if (in == null) in = "";
         in = in.trim();
         char[] a = in.toCharArray();
@@ -299,7 +345,7 @@ public class MQTTClient {
             for (int dev = 1; dev < 9; dev++) {
                 boolean one = ("" + a[9 - dev + 4]).equals("1");
                 debug("dev[" + dev + "]=" + (one ? "1" : "0"));
-                client.publish(BASE_TOPIC+"/switch/" + cc.getDeviceName() + "/switch" + dev + "/state",
+                client.publish(BASE_TOPIC + "/switch/" + hhc.getDeviceName() + "/switch" + dev + "/state",
                         new MqttMessage((one ? "ON" : "OFF").getBytes()));
                 //setSwitchesAvailable(dev);
             }
@@ -314,16 +360,56 @@ public class MQTTClient {
         logger.error(e);
     }
 
-    public static void main(String[] args) throws Exception {
 
+    public static void main(String[] args) {
+        debug("STARTING");
+        error("STARTING");
+        System.out.println("Starting");
+        final MQTTClient mqtt = new MQTTClient();
+        System.out.println("Connected to MQTT");
 
-        MQTTClient c = new MQTTClient();
-        c.process();
-        // c.cc.sendMessage("off1");
-        // c.cc.sendMessage("off3");
+        mqtt.hhc = new HHCClient();
+        mqtt.hhc.restart();
 
-        // c.readSwitches();
+        new Thread(() -> {
+            boolean error = true;
+            while (error) {
+                try {
+                    System.out.println("Start processing HHC");
+                    mqtt.process();
+                    error = false;
+                } catch (Exception e) {
+                    error = true;
+                    System.out.println("MQTT#333 " + e.getMessage());
+                    try {
+                        Thread.sleep(1000);
+                    } catch (Exception e2) {
+                    }
+                }
+            }
+        }).start();
 
+        ModbusTCPAlarm mta = new ModbusTCPAlarm(mqtt);
 
+        new Thread(() -> {
+            boolean error = true;
+            while (error) {
+                try {
+                    System.out.println("Start processing Modbus");
+                    mqtt.connect();
+                    mta.process();
+                    error = false;
+                } catch (Exception e) {
+                    error = true;
+                    System.out.println("MQTT#357 " + e.getMessage());
+                    error("MQTT#371 " + e.getMessage());
+                    try {
+                        Thread.sleep(1000);
+                    } catch (Exception e2) {
+                    }
+                }
+            }
+        }
+        ).start();
     }
 }
